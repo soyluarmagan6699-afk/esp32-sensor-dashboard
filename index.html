@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Sensor Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: fadeInDown 0.8s ease;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .status-banner {
+            display: inline-block;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .status-normal {
+            background: #27ae60;
+            color: white;
+        }
+
+        .status-alarm {
+            background: #e74c3c;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .card-icon {
+            font-size: 2em;
+            margin-right: 15px;
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #555;
+        }
+
+        .sensor-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .sensor-label {
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        canvas {
+            max-height: 300px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .connected {
+            background: #27ae60;
+            color: white;
+        }
+
+        .disconnected {
+            background: #e74c3c;
+            color: white;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.5em;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+        }
+
+        .alert {
+            background: #e74c3c;
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            font-size: 1.2em;
+            font-weight: bold;
+            animation: slideUp 0.5s ease, shake 0.5s ease 0.5s;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        .axis-values {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .axis-item {
+            text-align: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .axis-label {
+            font-size: 0.9em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .axis-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 30px;
+            padding: 20px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">🔌 Bağlanıyor...</div>
+
+    <div class="container">
+        <header>
+            <h1>🎛️ ESP32 Sensör İzleme Paneli</h1>
+            <div class="status-banner" id="alarmBanner">✅ Normal Durum</div>
+        </header>
+
+        <div id="loadingScreen" class="loading">
+            <div class="spinner"></div>
+            <p>Firebase'e bağlanılıyor...</p>
+        </div>
+
+        <div id="dashboard" style="display: none;">
+            <div class="dashboard-grid">
+                <!-- Titreşim Kartı -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon">📳</div>
+                        <div class="card-title">Toplam Titreşim</div>
+                    </div>
+                    <div class="sensor-value" id="totalAccel">0.00</div>
+                    <div class="sensor-label">m/s²</div>
+                    <div class="axis-values">
+                        <div class="axis-item">
+                            <div class="axis-label">X Ekseni</div>
+                            <div class="axis-value" id="accelX">0.00</div>
+                        </div>
+                        <div class="axis-item">
+                            <div class="axis-label">Y Ekseni</div>
+                            <div class="axis-value" id="accelY">0.00</div>
+                        </div>
+                        <div class="axis-item">
+                            <div class="axis-label">Z Ekseni</div>
+                            <div class="axis-value" id="accelZ">0.00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ses Kartı -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon">🔊</div>
+                        <div class="card-title">Ses Seviyesi</div>
+                    </div>
+                    <div class="sensor-value" id="soundLevel">0</div>
+                    <div class="sensor-label">/ 4095</div>
+                </div>
+
+                <!-- Sistem Bilgileri -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-icon">📊</div>
+                        <div class="card-title">Sistem Durumu</div>
+                    </div>
+                    <div style="font-size: 1em; color: #555;">
+                        <p style="margin: 10px 0;">📡 WiFi Sinyal: <strong id="wifiRSSI">-</strong> dBm</p>
+                        <p style="margin: 10px 0;">⏱️ Çalışma Süresi: <strong id="uptime">-</strong></p>
+                        <p style="margin: 10px 0;">💾 Boş RAM: <strong id="freeHeap">-</strong> KB</p>
+                        <p style="margin: 10px 0;">🔥 Firebase: <strong id="firebaseStatus">Bağlı</strong></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grafikler -->
+            <div class="chart-container">
+                <h2 style="margin-bottom: 20px; color: #555;">📈 Titreşim Geçmişi</h2>
+                <canvas id="vibrationChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <h2 style="margin-bottom: 20px; color: #555;">🎵 Ses Geçmişi</h2>
+                <canvas id="soundChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>ESP32 + Firebase Real-time Monitoring | Mekatronik Proje</p>
+    </footer>
+
+    <div class="alert-container" id="alertContainer"></div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Ana Script -->
+    <script>
+        // ==================== FIREBASE AYARLARI ====================
+        // BURAYA KENDİ FİREBASE BİLGİLERİNİ YAPIŞTIR!
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEMx-FoF9NCNQjCZCAvdwsdwkQIZ_kTWw",
+  authDomain: "esp32-sensor-monitor-75499.firebaseapp.com",
+  databaseURL: "https://esp32-sensor-monitor-75499-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "esp32-sensor-monitor-75499",
+  storageBucket: "esp32-sensor-monitor-75499.firebasestorage.app",
+  messagingSenderId: "180469010396",
+  appId: "1:180469010396:web:368fd286da46f14d690919"
+        };
+
+        // Firebase'i başlat
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // ==================== GLOBAL DEĞİŞKENLER ====================
+        let vibrationChart, soundChart;
+        let lastAlarmState = false;
+        let vibrationData = [];
+        let soundData = [];
+        let timeLabels = [];
+        const maxDataPoints = 30;
+
+        // ==================== SAYFA YÜKLENİNCE ====================
+        window.addEventListener('load', () => {
+            initializeCharts();
+            connectToFirebase();
+        });
+
+        // ==================== GRAFİKLERİ BAŞLAT ====================
+        function initializeCharts() {
+            const vibrationCtx = document.getElementById('vibrationChart').getContext('2d');
+            vibrationChart = new Chart(vibrationCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Toplam İvme (m/s²)',
+                        data: vibrationData,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'm/s²'
+                            }
+                        }
+                    }
+                }
+            });
+
+            const soundCtx = document.getElementById('soundChart').getContext('2d');
+            soundChart = new Chart(soundCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Ses Seviyesi',
+                        data: soundData,
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 4095,
+                            title: {
+                                display: true,
+                                text: 'Seviye (0-4095)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ==================== FIREBASE BAĞLANTISI ====================
+        function connectToFirebase() {
+            const statusEl = document.getElementById('connectionStatus');
+            
+            // Bağlantı durumunu izle
+            database.ref('.info/connected').on('value', (snapshot) => {
+                if (snapshot.val() === true) {
+                    statusEl.textContent = '✅ Bağlı';
+                    statusEl.className = 'connection-status connected';
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                } else {
+                    statusEl.textContent = '❌ Bağlantı Kesildi';
+                    statusEl.className = 'connection-status disconnected';
+                }
+            });
+
+            // Sensör verilerini dinle
+            listenToSensorData();
+            listenToAlarmState();
+        }
+
+        // ==================== SENSÖR VERİLERİNİ DİNLE ====================
+        function listenToSensorData() {
+            // Titreşim verileri
+            database.ref('/sensors/acceleration').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    document.getElementById('accelX').textContent = data.x.toFixed(2);
+                    document.getElementById('accelY').textContent = data.y.toFixed(2);
+                    document.getElementById('accelZ').textContent = data.z.toFixed(2);
+                    document.getElementById('totalAccel').textContent = data.total.toFixed(2);
+
+                    // Grafiğe ekle
+                    addDataToChart(data.total, null);
+                }
+            });
+
+            // Ses verileri
+            database.ref('/sensors/sound/level').on('value', (snapshot) => {
+                const level = snapshot.val();
+                if (level !== null) {
+                    document.getElementById('soundLevel').textContent = level;
+
+                    // Grafiğe ekle
+                    addDataToChart(null, level);
+                }
+            });
+
+            // Sistem bilgileri
+            database.ref('/system').on('value', (snapshot) => {
+                const system = snapshot.val();
+                if (system) {
+                    document.getElementById('wifiRSSI').textContent = system.wifiRSSI || '-';
+                    document.getElementById('uptime').textContent = formatUptime(system.uptime);
+                    document.getElementById('freeHeap').textContent = (system.freeHeap / 1024).toFixed(1);
+                }
+            });
+        }
+
+        // ==================== ALARM DURUMUNUDİNLE ====================
+        function listenToAlarmState() {
+            database.ref('/alarm/active').on('value', (snapshot) => {
+                const alarmActive = snapshot.val();
+                const banner = document.getElementById('alarmBanner');
+
+                if (alarmActive) {
+                    banner.textContent = '⚠️ ALARM AKTİF!';
+                    banner.className = 'status-banner status-alarm';
+
+                    // İlk alarm anında bildirim göster
+                    if (!lastAlarmState) {
+                        showAlert('⚠️ UYARI! Eşik değer aşıldı!');
+                        playAlarmSound();
+                    }
+                } else {
+                    banner.textContent = '✅ Normal Durum';
+                    banner.className = 'status-banner status-normal';
+                }
+
+                lastAlarmState = alarmActive;
+            });
+        }
+
+        // ==================== GRAFİĞE VERİ EKLE ====================
+        function addDataToChart(vibration, sound) {
+            const now = new Date();
+            const timeStr = now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+
+            // Yeni veri ekle
+            if (vibration !== null) vibrationData.push(vibration);
+            if (sound !== null) soundData.push(sound);
+            timeLabels.push(timeStr);
+
+            // Maksimum veri sayısını kontrol et
+            if (timeLabels.length > maxDataPoints) {
+                vibrationData.shift();
+                soundData.shift();
+                timeLabels.shift();
+            }
+
+            // Grafikleri güncelle
+            vibrationChart.update('none');
+            soundChart.update('none');
+        }
+
+        // ==================== UYARI GÖSTER ====================
+        function showAlert(message) {
+            const container = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = 'alert';
+            alert.textContent = message;
+            container.appendChild(alert);
+
+            // 5 saniye sonra kaldır
+            setTimeout(() => {
+                alert.style.animation = 'slideDown 0.5s ease';
+                setTimeout(() => alert.remove(), 500);
+            }, 5000);
+        }
+
+        // ==================== ALARM SESİ ÇAL ====================
+        function playAlarmSound() {
+            // Tarayıcı ses desteği varsa
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            gainNode.gain.value = 0.3;
+
+            oscillator.start();
+            setTimeout(() => oscillator.stop(), 200);
+        }
+
+        // ==================== YARDIMCI FONKSİYONLAR ====================
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours}s ${minutes}d ${secs}s`;
+        }
+    </script>
+</body>
+</html>
